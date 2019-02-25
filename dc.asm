@@ -28,7 +28,7 @@
 	uj	start
 
 devices:
-	.word	DEV_TERM,	7\IO_CHAN | 4\IO_DEV,	drv_kz
+	.word	DEV_TERM,	7\IO_CHAN | 0\IO_DEV,	drv_kz
 	.word	DEV_FLOP,	7\IO_CHAN | 5\IO_DEV,	drv_kz
 	.word	DEV_NONE,	0,			0
 
@@ -60,31 +60,37 @@ start:
 	lj	kz_init
 
 	im	imask
-	lwt	r2, 0
 
-.restart:
-	lw	r3, buf<<1
 .loop:
+	lw	r5, buf<<1
+.read_next_char:
+	lwt	r2, 0
 	lj	getc
 
-	rb	r1, r3
-	awt	r3, 1
+	rb	r1, r5
+	awt	r5, 1
 
-	cw	r1, '\x0d'
+	cwt	r1, '\x0d'
 	jes	.print
-	ujs	.loop
+	ujs	.read_next_char
 
 .print:	
 	lwt	r1, 0
-	rb	r1, r3
+	rb	r1, r5
 
+	lwt	r2, 0
+	lw	r1, txt
+	lj	puts
+
+	lwt	r2, 0
 	lw	r1, buf
 	lj	puts
 
+	lwt	r2, 0
 	lw	r1, nl
 	lj	puts
 
-	ujs	.restart
+	ujs	.loop
 
 txt:	.asciiz "Dostałem: "
 nl:	.asciiz "\n\r"
