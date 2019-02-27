@@ -36,6 +36,8 @@ imask:	.res	1
 
 dummy:	lip
 
+stack:	.res	11*4, 0x0ded
+
 	.org	INTV
 	.res	32, dummy
 	.org	OS_START
@@ -61,40 +63,19 @@ start:
 
 	im	imask
 
-.loop:
-	lw	r5, buf<<1
-.read_next_char:
+	lw	r1, -32768
+	lw	r2, buf<<1
+	lj	signed2asc
+
+	lw	r1, buf<<1
 	lwt	r2, 0
-	lj	getc
-
-	rb	r1, r5
-	awt	r5, 1
-
-	cwt	r1, '\x0d'
-	jes	.print
-	ujs	.read_next_char
-
-.print:	
-	lwt	r1, 0
-	rb	r1, r5
-
-	lwt	r2, 0
-	lw	r1, txt
 	lj	puts
 
 	lwt	r2, 0
-	lw	r1, buf
-	lj	puts
+	lw	r1, '\r\n'
+	lj	put2c
 
-	lwt	r2, 0
-	lw	r1, nl
-	lj	puts
-
-	ujs	.loop
-
-txt:	.asciiz "Dostałem: "
-nl:	.asciiz "\n\r"
+	hlt
 
 ; ------------------------------------------------------------------------
-stack:	.res	11*4
 buf:
