@@ -63,11 +63,10 @@ puts:
 	md	[devices + dev.drv + r2]
 	lw	r7, [driver.putc] ; device putc function address
 	lw	r2, [devices + dev.ioaddr + r2] ; device I/O address
-
 .loop:
 	lb	r1, r3
 	zlb	r1
-	cwt	r1, 0
+	cwt	r1, '\0'
 	jes	.done
 
 	rj	r4, r7
@@ -76,15 +75,15 @@ puts:
 	jls	.done
 	awt	r3, 1
 	ujs	.loop
-
-.done:	lw	r7, [.regs]
+.done:
+	lw	r7, [.regs]
 	uj	[puts]
 .regs:	.res	1
 
 ; ------------------------------------------------------------------------
-; r1 - byte address of the read buffer
+; r1 - byte address of the buffer
 ; r2 - device number
-; r3 - bytes count
+; r3 - byte count
 write:
 	.res	1
 	rl	.regs
@@ -95,7 +94,6 @@ write:
 	md	[devices + dev.drv + r2]
 	lw	r7, [driver.putc] ; device putc function address
 	lw	r2, [devices + dev.ioaddr + r2] ; device I/O address
-
 .loop:
 	cw	r6, r3
 	jes	.done
@@ -107,9 +105,57 @@ write:
 	jls	.done
 	awt	r3, 1
 	ujs	.loop
-
-.done:	ll	.regs
+.done:
+	ll	.regs
 	uj	[write]
+.regs:	.res	3
+
+; ------------------------------------------------------------------------
+; r1 - byte address of the buffer
+; r2 - device number
+; r3 - byte count
+read:
+	.res	1
+	rl	.regs
+	lw	r7, r1 ; buffer addr
+	lw	r5, r2 ; device
+	lw	r6, r3 ; count
+
+.loop:
+	lj	getc
+	rb	r1, r7
+	awt	r7, 1
+	lw	r2, r5
+	drb	r6, .loop
+
+	ll	.regs
+	uj	[read]
+.regs:	.res	3
+
+; ------------------------------------------------------------------------
+; r1 - byte address of the buffer
+; r2 - device number
+readln:
+	.res	1
+	rl	.regs
+	lw	r7, r1 ; buffer addr
+	lw	r5, r2 ; device
+
+.loop:
+	lj	getc
+	cwt	r1, '\n'
+	jes	.done
+	cwt	r1, '\r'
+	jes	.done
+	rb	r1, r7
+	awt	r7, 1
+	lw	r2, r5
+	ujs	.loop
+.done:
+	lwt	r1, 0
+	rb	r1, r7
+	ll	.regs
+	uj	[readln]
 .regs:	.res	3
 
 ; ------------------------------------------------------------------------
@@ -143,20 +189,25 @@ hex2asc:
 unsigned2asc:
 	.res	1
 
-	lw	r4, .divs ; current divider
+	lw	r4, divs ; current divider
 	lw	r3, r2 ; buffer address
 	lw	r2, r1 ; value
 	or	r0, ?1 ; 'only 0s so far' indicator
+
+	; special case for '0'
+	cwt	r2, 0
+	jn	.loop
+	awt	r2, '0'
+	ujs	.last
 .loop:
 	lwt	r1, 0
 	dw	r4 ; r1 = remainder, r2 = r2/[r4]
 
-	cwt	r2, 0
+	cwt	r2, '\0'
 	jn	.store ; this is not '0' -> store this digit
 	; this is '0'
 	brc	?1 ; branch if there were digits other than 0 already
 	jes	.skip ; there were no other digits than '0' yet
-
 .store:
 	er	r0, ?1
 	awt	r2, '0'
@@ -177,7 +228,6 @@ unsigned2asc:
 	rb	r2, r3
 
 	uj	[unsigned2asc]
-.divs:	.word	10000, 1000, 100, 10, 0
 .regs:	.res	1
 
 ; ------------------------------------------------------------------------
@@ -196,8 +246,98 @@ signed2asc:
 	lw	r4, '-'
 	rb	r4, r2
 	awt	r2, 1
-
 .go:
 	lj	unsigned2asc
-
 	uj	[signed2asc]
+
+; ------------------------------------------------------------------------
+; r1 - dest (byte address)
+; r2 - src (byte address)
+; r3 - count
+strncpy:
+	.res	1
+	lwt	r4, 1 ; make sure first loop reads a byte
+.loop:
+	cwt	r4, '\0'
+	blc	?G ; skip if there is no more bytes to read
+	lb	r4, r2
+	rb	r4, r1
+	awt	r1, 1
+	awt	r2, 1
+	drb	r3, .loop
+
+	uj	[strncpy]
+
+; ------------------------------------------------------------------------
+; r1 - dest
+; d2 - src
+strcpy:
+	.res	1
+
+	lw	r3, -1
+	lj	strncpy
+
+	uj	[strcpy]
+
+; ------------------------------------------------------------------------
+; r1 - string byte address
+; RETURN: r1 - length
+strlen:
+	.res	1
+
+	lwt	r2, 0
+.loop:
+	lb	r4, r1
+	cwt	r4, '\0'
+	jes	.done
+	awt	r2, 1
+	awt	r1, 1
+	ujs	.loop
+.done:
+	lw	r1, r2
+	uj	[strlen]
+
+; ------------------------------------------------------------------------
+; r1 - string byte addres
+; RETURN: r1 - integer
+atoi:
+	.res	1
+
+	lw	r3, r1 ; address
+	lwt	r2, 0 ; the integer
+	lwt	r1, 0 ; clear before MW
+	lwt	r4, 0
+	er	r0, ?1 ; set if number is negative
+
+	; check sign
+	lb	r4, r3
+	cwt	r4, '-'
+	jn	.cont
+	awt	r3, 1
+	or	r0, ?1
+.loop:
+	lb	r4, r3
+.cont:
+	cwt	r4, '0'
+	jls	.done
+	cwt	r4, '9'
+	jgs	.done
+	mw	ten
+	awt	r4, -'0'
+	aw	r2, r4
+	awt	r3, 1
+	ujs	.loop
+.done:
+	brc	?1
+	mw	minus1
+	lw	r1, r2
+
+	uj	[atoi]
+
+; ------------------------------------------------------------------------
+divs:	.word	10000
+	.word	1000
+	.word	100
+ten:	.word	10
+	.word	0
+minus1:	.word	-1

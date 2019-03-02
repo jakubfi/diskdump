@@ -62,20 +62,23 @@ start:
 	lj	kz_init
 
 	im	imask
-
-	lw	r1, -32768
-	lw	r2, buf<<1
-	lj	signed2asc
-
-	lw	r1, buf<<1
+.loop:
 	lwt	r2, 0
+	lw	r1, buf<<1
+	lj	readln
+
+	lw	r1, txt<<1
+	lw	r2, 0
 	lj	puts
 
-	lwt	r2, 0
-	lw	r1, '\r\n'
-	lj	put2c
+	lw	r1, buf<<1
+	lw	r2, 0
+	lj	puts
 
+	ujs	.loop
 	hlt
 
 ; ------------------------------------------------------------------------
-buf:
+txt:	.asciiz	"Mam: "
+	.asciiz	"------------------------------------------------------\r\n"
+buf:	.asciiz	"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n"
