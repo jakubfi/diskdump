@@ -341,3 +341,21 @@ divs:	.word	10000
 ten:	.word	10
 	.word	0
 minus1:	.word	-1
+
+; ------------------------------------------------------------------------
+; r1 - address
+; r2 - length (words)
+; RETURN: r1 - control sum
+ctlsum:
+	.res	1
+
+	lwt	r3, 0
+	cwt	r2, 0
+	jes	.done
+.loop:
+	aw	r3, [r1]
+	awt	r1, 1
+	drb	r2, .loop
+.done:
+	lw	r1, r3
+	uj	[ctlsum]

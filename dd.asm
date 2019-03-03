@@ -63,22 +63,25 @@ start:
 
 	im	imask
 .loop:
-	lwt	r2, 0
-	lw	r1, buf<<1
-	lj	readln
+	lw	r1, test
+	lwt	r2, 4
+	lj	ctlsum
 
-	lw	r1, txt<<1
+	lw	r2, buf<<1
+	lj	unsigned2asc
+
+	lw	r1, buf<<1
 	lw	r2, 0
 	lj	puts
 
-	lw	r1, buf<<1
 	lw	r2, 0
-	lj	puts
+	lw	r1, '\n\t'
+	lj	put2c
 
-	ujs	.loop
 	hlt
 
 ; ------------------------------------------------------------------------
 txt:	.asciiz	"Mam: "
 	.asciiz	"------------------------------------------------------\r\n"
 buf:	.asciiz	"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n"
+test:	.word	1, 2, 1000, 20000
