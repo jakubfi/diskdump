@@ -8,6 +8,9 @@ drv_kz:
 imask_noch:
         .word   IMASK_ALL-IMASK_ALL_CH
 
+kz_last_intspec:
+	.res	1
+
 ; ------------------------------------------------------------------------
 ; r1 - channel number
 ; r2 - device table
@@ -47,18 +50,29 @@ kz_init:
 ; ------------------------------------------------------------------------
 kz_reset:
 	.res	1
+	; TODO
 	uj	[kz_reset]
 
 ; ------------------------------------------------------------------------
 kz_irq:
-	rw	r4, .regs
+	rws	r4, .regs
+
 	lw	r4, [kz_idle]
 	cwt	r4, 0
 	jes	.done
+
 	md	[STACKP]
 	rw	r4, -SP_IC
+
+	md	[STACKP]
+	lw	r4, [-SP_SPEC]
+	shc	r4, 8
+	zlb	r4
+	rw	r4, kz_last_intspec
+
 	rz	kz_idle
-.done:	lw	r4, [.regs]
+.done:
+	lws	r4, .regs
 	lip
 .regs:	.res	1
 
