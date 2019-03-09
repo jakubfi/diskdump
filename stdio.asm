@@ -161,6 +161,31 @@ readln:
 ; ------------------------------------------------------------------------
 ; r1 - value
 ; r2 - buffer byte address
+bin2asc:
+	.res	1
+
+	lwt	r4, -16
+.loop:
+	; '0' or '1'?
+	lwt	r3, '0'
+	slz	r1
+	blc	?Y
+	lwt	r3, '1'
+
+	; store
+	rb	r3, r2
+	awt	r2, 1
+	irb	r4, .loop
+
+	; store ending '\0'
+	lwt	r3, 0
+	rb	r3, r2
+
+	uj	[bin2asc]
+
+; ------------------------------------------------------------------------
+; r1 - value
+; r2 - buffer byte address
 hex2asc:
 	.res	1
 

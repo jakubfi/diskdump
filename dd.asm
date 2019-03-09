@@ -87,9 +87,17 @@ start:
 
 	im	imask
 
+	lw	r2, buf<<1
+	lw	r1, 0b1011001011001111
+	lj	bin2asc
+
 	lwt	r2, 0
-	lw	r1, txt<<1
+	lw	r1, buf<<1
 	lj	puts
+
+	lwt	r2, 0
+	lw	r1, '\r\n'
+	lj	put2c
 
 	hlt
 
