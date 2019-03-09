@@ -7,6 +7,7 @@
 	.const	RET_OK 0
 	.const	RET_NODEV -1
 	.const	RET_PARITY -2
+	.const	RET_IOERR -3
 
 	.const	DEV_NONE 0
 	.const	DEV_TERM 1
@@ -28,9 +29,19 @@
 	uj	start
 
 devices:
+	; Dęblin:
+	;.word	DEV_TERM,	15\IO_CHAN | 0\IO_DEV,	drv_kz ; 0: UZ-DAT terminal znakowy
+	;.word	DEV_FLOP,	15\IO_CHAN | 2\IO_DEV,	drv_kz ; 1: UZ-FX flop
+	;.word	DEV_TERM,	15\IO_CHAN | 4\IO_DEV,	drv_kz ; 2: UZ-DAT usb<->PC
+	;.word	DEV_NONE,	0,			0
+
+	; Merusia:
 	.word	DEV_TERM,	7\IO_CHAN | 0\IO_DEV,	drv_kz
-	.word	DEV_FLOP,	7\IO_CHAN | 5\IO_DEV,	drv_kz
 	.word	DEV_NONE,	0,			0
+
+	.const	PC 0
+	.const	FLOP 0
+	.const	TERM 0
 
 imask:	.res	1
 
@@ -48,6 +59,19 @@ stack:	.res	11*4, 0x0ded
 ; ------------------------------------------------------------------------
 ; ------------------------------------------------------------------------
 ; ------------------------------------------------------------------------
+
+; 1 ścieżka do celów specjalnych (0)
+; 73 ścieżki użytkowe (1-73)
+; 3 ścieżki zapasowe (74-76)
+;
+; 26 sektorów, 128 bajtów
+; 3328 bajtów na ścieżkę
+; 242944 bajtów na stronę
+;
+; przerwanie 'koniec nośnika' 00100 pojawia się przy próbie dostępu
+; do ostatniego sektora (26) ostatniej ścieżki (73)
+; i poprzedza przerwanie 'ponowna gotowość'
+
 start:
 	mcl
 
@@ -62,26 +86,15 @@ start:
 	lj	kz_init
 
 	im	imask
-.loop:
-	lw	r1, test
-	lwt	r2, 4
-	lj	ctlsum
 
-	lw	r2, buf<<1
-	lj	unsigned2asc
-
-	lw	r1, buf<<1
-	lw	r2, 0
+	lwt	r2, 0
+	lw	r1, txt<<1
 	lj	puts
-
-	lw	r2, 0
-	lw	r1, '\n\t'
-	lj	put2c
 
 	hlt
 
 ; ------------------------------------------------------------------------
-txt:	.asciiz	"Mam: "
+txt:	.asciiz	"Test\r\n"
 	.asciiz	"------------------------------------------------------\r\n"
 buf:	.asciiz	"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n"
 test:	.word	1, 2, 1000, 20000
