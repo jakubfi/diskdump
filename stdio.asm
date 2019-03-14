@@ -33,6 +33,7 @@ put2c:
 	rw	r5, .regs
 
 	lw	r5, r1
+	shc	r1, 8
 	lw	r3, devices + r2
 	lw	r2, [r3 + dev.ioaddr]
 
@@ -43,7 +44,6 @@ put2c:
 	jls	.done
 
 	lw	r1, r5
-	shc	r1, 8
 	md	[r3 + dev.drv]
 	rj	r4, [driver.putc]
 .done:
