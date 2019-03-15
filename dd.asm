@@ -54,12 +54,15 @@ devices:
 
 imask:	.res	1
 
-dummy:	lip
+dummy:	hlt	045
+	ujs	dummy
 
 stack:	.res	11*4, 0x0ded
 
 	.org	INTV
 	.res	32, dummy
+	.org	EXLV
+	.word	dummy
 	.org	OS_START
 
 	.include kz.asm
@@ -137,9 +140,9 @@ start:
 
 ; ------------------------------------------------------------------------
 
+.ifndef DEBLIN
 	lwt	r1, 10
 	lwt	r2, 33
-.ifndef DEBLIN
 	lj	seed
 .endif
 
