@@ -29,19 +29,28 @@
 	uj	start
 
 devices:
-	; Dęblin:
-	;.word	DEV_TERM,	15\IO_CHAN | 0\IO_DEV,	drv_kz ; 0: UZ-DAT terminal znakowy
-	;.word	DEV_FLOP,	15\IO_CHAN | 2\IO_DEV,	drv_kz ; 1: UZ-FX flop
-	;.word	DEV_TERM,	15\IO_CHAN | 4\IO_DEV,	drv_kz ; 2: UZ-DAT usb<->PC
-	;.word	DEV_NONE,	0,			0
 
-	; Merusia:
-	.word	DEV_TERM,	7\IO_CHAN | 0\IO_DEV,	drv_kz
+.ifdef DEBLIN
+	.const	CH 15
+
+	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz ; 0: UZ-DAT terminal znakowy
+	.word	DEV_FLOP,	CH\IO_CHAN | 2\IO_DEV,	drv_kz ; 1: UZ-FX flop
+	.word	DEV_TERM,	CH\IO_CHAN | 4\IO_DEV,	drv_kz ; 2: UZ-DAT usb<->PC
 	.word	DEV_NONE,	0,			0
 
-	.const	PC 0
-	.const	FLOP 0
 	.const	TERM 0
+	.const	FLOP 1
+	.const	PC 2
+.else
+	.const	CH 7
+
+	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz
+	.word	DEV_NONE,	0,			0
+
+	.const	TERM 0
+	.const	FLOP 0
+	.const	PC 0
+.endif
 
 imask:	.res	1
 
@@ -55,6 +64,45 @@ stack:	.res	11*4, 0x0ded
 
 	.include kz.asm
 	.include stdio.asm
+
+.ifndef DEBLIN
+	.include prng.inc
+
+; ------------------------------------------------------------------------
+; r1 - byte address of the buffer
+; r2 - device number
+; r3 - byte count
+; RETURN: r1 - operation result
+read_fake:
+	.res	1
+	rl	.regs
+
+	lw	r5, r1
+	lw	r6, r3
+
+	lj	urand
+	cw	r1, 10000
+	jls	.loop_empty
+
+.loop_rnd:
+	lj	urand
+	rb	r1, r5
+	awt	r5, 1
+	drb	r6, .loop_rnd
+	ujs	.done
+
+.loop_empty:
+	rb	r1, r5
+	awt	r5, 1
+	drb	r6, .loop_empty
+
+.done:
+	lwt	r1, 0
+	ll	.regs
+	uj	[read_fake]
+.regs:	.res	3
+
+.endif
 
 ; ------------------------------------------------------------------------
 ; ------------------------------------------------------------------------
@@ -87,22 +135,164 @@ start:
 
 	im	imask
 
-	lw	r2, buf<<1
-	lw	r1, 0b1011001011001111
-	lj	bin2asc
+; ------------------------------------------------------------------------
 
-	lwt	r2, 0
+	lwt	r1, 10
+	lwt	r2, 33
+.ifndef DEBLIN
+	lj	seed
+.endif
+
+.ifdef DEBLIN
+	.const	TRACKS 73+1
+	.const	SPT 26
+.else
+	.const	TRACKS 3
+	.const	SPT 2
+.endif
+	.const	SECT_LEN 128
+	.const	READ_LEN SECT_LEN
+
+	; seek to track 0, 'the special one'
+
+.ifdef DEBLIN
+	lw	r1, KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A | 0\KZ_FLOPPY_TRACK | 1\KZ_FLOPPY_SECTOR
+	ou	r1, CH\IO_CHAN | 2\IO_DEV | KZ_CMD_CTL4
+	.word	.no, .en, .ok, .pe
+.no:
+.en:
+.pe:	hlt	044
+.ok:
+.endif
+	; load track count
+
+	lw	r6, -TRACKS
+
+.loop_track:
+
+	; load sector count
+
+	lw	r5, -SPT
+
+.loop_sector:
+
+	; write track number byte
+
+	lw	r1, r6 + TRACKS
+	lwt	r2, PC
+	lj	putc
+
+	; write sector number byte
+
+	lw	r1, r5 + SPT+1
+	lwt	r2, PC
+	lj	putc
+
+	; clear the buffer
+
+	lw	r1, buf
+	lw	r2, READ_LEN/2
+	lw	r3, '__'
+	lj	memset
+
+	; read data from disk
+
 	lw	r1, buf<<1
-	lj	puts
+	lwt	r2, FLOP
+	lw	r3, READ_LEN
+.ifdef DEBLIN
+	lj	read
+.else
+	lj	read_fake
+.endif
 
-	lwt	r2, 0
-	lw	r1, '\r\n'
+	; write return code byte
+
+	lwt	r2, PC
+	lj	putc
+
+	; write I/O status byte
+
+	lw	r1, [kz_last_intspec]
+	lwt	r2, PC
+	lj	putc
+
+	; calculate control sum
+
+	lw	r1, buf
+	lw	r2, READ_LEN/2
+	lj	ctlsum
+
+	; write control sum word
+
+	lwt	r2, PC
 	lj	put2c
+
+	; check for blank sector
+
+	lw	r3, (READ_LEN/2)-1
+	lw	r2, [buf]
+	awt	r1, 1
+.chkloop:
+	cw	r2, [buf+r3]
+	jn	.regular_sector
+	drb	r3, .chkloop
+	ujs	.empty_sector
+
+.regular_sector:
+
+	; write frame type (0: regular)
+
+	lw	r1, 0
+	lwt	r2, PC
+	lj	putc
+
+	; write data len word
+
+	lw	r1, READ_LEN
+	lwt	r2, PC
+	lj	put2c
+
+	; write data
+
+	lw	r1, buf<<1
+	lwt	r2, PC
+	lw	r3, READ_LEN
+	lj	write
+
+	ujs	.loop_restart
+
+.empty_sector:
+
+	; write frame type (1: fill)
+
+	lw	r1, 1
+	lwt	r2, PC
+	lj	putc
+
+	; write data len word
+
+	lw	r1, 2
+	lwt	r2, PC
+	lj	put2c
+
+	; write data
+
+	lw	r1, [buf]
+	lwt	r2, PC
+	lj	put2c
+
+.loop_restart:
+
+	; loop over
+
+	awt	r5, 1
+	jm	.loop_sector
+
+	awt	r6, 1
+	jm	.loop_track
 
 	hlt
 
 ; ------------------------------------------------------------------------
-txt:	.asciiz	"Test\r\n"
-	.asciiz	"------------------------------------------------------\r\n"
-buf:	.asciiz	"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n"
-test:	.word	1, 2, 1000, 20000
+buf:
