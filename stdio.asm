@@ -84,6 +84,7 @@ puts:
 ; r1 - byte address of the buffer
 ; r2 - device number
 ; r3 - byte count
+; RETURN: r1 - operation result
 write:
 	.res	1
 	rl	.regs
@@ -114,6 +115,7 @@ write:
 ; r1 - byte address of the buffer
 ; r2 - device number
 ; r3 - byte count
+; RETURN: r1 - operation result
 read:
 	.res	1
 	rl	.regs
@@ -123,11 +125,16 @@ read:
 
 .loop:
 	lj	getc
+	cwt	r1, RET_OK
+	jls	.done
+
 	rb	r1, r7
 	awt	r7, 1
 	lw	r2, r5
 	drb	r6, .loop
 
+	lwt	r1, RET_OK
+.done:
 	ll	.regs
 	uj	[read]
 .regs:	.res	3
@@ -384,3 +391,16 @@ ctlsum:
 .done:
 	lw	r1, r3
 	uj	[ctlsum]
+
+; ------------------------------------------------------------------------
+; r1 - address
+; r2 - length (words)
+; r3 - filler word
+memset:
+	.res	1
+.loop:
+	rw	r3, r1
+	awt	r1, 1
+	drb	r2, .loop
+
+	uj	[memset]
