@@ -9,7 +9,7 @@ imask_noch:
         .word   IMASK_ALL-IMASK_ALL_CH
 
 kz_last_intspec:
-	.res	1
+	.word	1
 
 ; ------------------------------------------------------------------------
 ; r1 - channel number
@@ -62,14 +62,16 @@ kz_irq:
 	jes	.done
 
 	md	[STACKP]
-	rw	r4, -SP_IC
-
-	md	[STACKP]
 	lw	r4, [-SP_SPEC]
 	shc	r4, 8
 	zlb	r4
 	rw	r4, kz_last_intspec
+	cw	r4, KZ_INT_MEDIUM_END
+	jes	.done
 
+	lw	r4, [kz_idle]
+	md	[STACKP]
+	rw	r4, -SP_IC
 	rz	kz_idle
 .done:
 	lws	r4, .regs
