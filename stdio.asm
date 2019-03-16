@@ -112,6 +112,45 @@ write:
 .regs:	.res	3
 
 ; ------------------------------------------------------------------------
+; r1 - word address of the buffer
+; r2 - device number
+; r3 - word count
+; RETURN: r1 - operation result
+writew:
+	.res	1
+	rl	.regs
+
+	lw	r6, r3 ; requested write len
+	lwt	r3, 0 ; buf offset
+	lw	r5, r1 ; buf base addr
+	md	[devices + dev.drv + r2]
+	lw	r7, [driver.putc] ; device putc function address
+	lw	r2, [devices + dev.ioaddr + r2] ; device I/O address
+.loop:
+	cw	r6, r3
+	jes	.done
+
+	lw	r1, [r5 + r3]
+	shc	r1, 8
+	zlb	r1
+	rj	r4, r7
+	cwt	r1, RET_OK
+	jls	.done
+
+	lw	r1, [r5 + r3]
+	zlb	r1
+	rj	r4, r7
+	cwt	r1, RET_OK
+	jls	.done
+
+	awt	r3, 1
+	ujs	.loop
+.done:
+	ll	.regs
+	uj	[writew]
+.regs:	.res	3
+
+; ------------------------------------------------------------------------
 ; r1 - byte address of the buffer
 ; r2 - device number
 ; r3 - byte count
@@ -137,6 +176,43 @@ read:
 .done:
 	ll	.regs
 	uj	[read]
+.regs:	.res	3
+
+; ------------------------------------------------------------------------
+; r1 - word address of the buffer
+; r2 - device number
+; r3 - word count
+; RETURN: r1 - operation result
+readw:
+	.res	1
+	rl	.regs
+	lw	r7, r1 ; buffer addr
+	lw	r5, r2 ; device
+	lw	r6, r3 ; count
+
+.loop:
+	lj	getc
+	cwt	r1, RET_OK
+	jls	.done
+	shc	r1, 8
+	zrb	r1
+	rw	r1, r7
+
+	lw	r2, r5
+	lj	getc
+	cwt	r1, RET_OK
+	jls	.done
+	zlb	r1
+	om	r1, r7
+
+	awt	r7, 1
+	lw	r2, r5
+	drb	r6, .loop
+
+	lwt	r1, RET_OK
+.done:
+	ll	.regs
+	uj	[readw]
 .regs:	.res	3
 
 ; ------------------------------------------------------------------------
