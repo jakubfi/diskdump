@@ -6,7 +6,7 @@ drv_kz:
 	.word	kz_putc
 
 imask_noch:
-        .word   IMASK_ALL-IMASK_ALL_CH
+        .word   IMASK_ALL & ~(IMASK_CPU_H | IMASK_GROUP_L | IMASK_ALL_CH)
 
 kz_last_intspec:
 	.word	1

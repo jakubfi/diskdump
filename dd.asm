@@ -52,7 +52,7 @@ devices:
 	.const	PC 0
 .endif
 
-imask:	.res	1
+imask:	.word	IMASK_ALL & ~(IMASK_CPU_H | IMASK_GROUP_L)
 
 dummy:	hlt	045
 	ujs	dummy
@@ -63,6 +63,8 @@ stack:	.res	11*4, 0x0ded
 	.res	32, dummy
 	.org	EXLV
 	.word	dummy
+	.org	STACKP
+	.word	stack
 	.org	OS_START
 
 	.include kz.asm
@@ -125,11 +127,6 @@ read_fake:
 
 start:
 	mcl
-
-	lw	r1, stack
-	rw	r1, STACKP
-	lw	r1, IMASK_ALL
-	rw	r1, imask
 
 	; initialize KZ in channel 7
 	lw	r1, 7
