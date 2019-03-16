@@ -128,8 +128,8 @@ read_fake:
 start:
 	mcl
 
-	; initialize KZ in channel 7
-	lw	r1, 7
+	; initialize KZ
+	lw	r1, CH
 	lw	r2, devices
 	lj	kz_init
 
