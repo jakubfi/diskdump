@@ -29,6 +29,7 @@
 .struct driver:
 	.init:	.res 1
 	.reset:	.res 1
+	.detach:.res 1
 	.getc:	.res 1
 	.putc:	.res 1
 .endstruct
@@ -134,7 +135,7 @@ read_data:
 	im	imask
 
 	lw	r1, buf
-	lw	r2, FLOP
+	lw	r2, PC
 	lw	r3, 65535-buf
 	lj	readw
 
@@ -147,6 +148,12 @@ write_data:
 	lw	r3, r7
 	sw	r3, buf
 	lj	writew
+
+	lw	r2, FLOP
+	lj	detach
+
+	lw	r2, FLOP
+	lj	reset
 
 	hlt
 

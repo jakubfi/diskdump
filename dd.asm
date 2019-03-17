@@ -293,6 +293,12 @@ start:
 	awt	r6, 1
 	jm	.loop_track
 
+        lw      r2, FLOP
+        lj      detach
+
+        lw      r2, FLOP
+        lj      reset
+
 	hlt
 
 ; ------------------------------------------------------------------------
