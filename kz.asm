@@ -2,6 +2,7 @@
 drv_kz:
 	.word	kz_init
 	.word	kz_reset
+	.word	kz_detach
 	.word	kz_getc
 	.word	kz_putc
 
@@ -48,12 +49,6 @@ kz_init:
 	uj	[kz_init]
 
 ; ------------------------------------------------------------------------
-kz_reset:
-	.res	1
-	; TODO
-	uj	[kz_reset]
-
-; ------------------------------------------------------------------------
 kz_irq:
 	rws	r4, .regs
 
@@ -86,6 +81,36 @@ kz_idle:
 	ujs	.halt
 
 ; ------------------------------------------------------------------------
+; r2 - device specification as for IN/OU
+kz_reset:
+	ou	r1, r2 + KZ_CMD_DEV_RESET
+	.word	.no, .en, .ok, .pe
+.no:
+.en:
+.ok:
+.pe:
+	uj	r4
+
+; ------------------------------------------------------------------------
+; r2 - device specification as for IN/OU
+kz_detach:
+.retry:	im	imask_noch
+
+	ou	r1, r2 + KZ_CMD_DEV_DETACH
+	.word	.no, .en, .ok, .pe
+
+.en:	lj	kz_idle
+	ujs	.retry
+
+.no:	lwt	r1, RET_NODEV
+	ujs	.done
+.pe:
+.ok:	lwt	r1, RET_OK
+.done:	im	imask
+
+	uj	r4
+
+; ------------------------------------------------------------------------
 ; r1 - character to print (on right byte)
 ; r2 - device specification as for IN/OU
 ; r4 - return jump
@@ -94,13 +119,14 @@ kz_putc:
 .retry:	im	imask_noch
 
 	ou	r1, r2 + KZ_CMD_DEV_WRITE
-	.word	.no, .en, .ok, .ok
+	.word	.no, .en, .ok, .pe
 
 .en:	lj	kz_idle
 	ujs	.retry
 
 .no:	lwt	r1, RET_NODEV
 	ujs	.done
+.pe:
 .ok:	lwt	r1, RET_OK
 .done:	im	imask
 	uj	r4

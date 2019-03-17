@@ -1,5 +1,27 @@
 ; ------------------------------------------------------------------------
 ; r2 - device number
+reset:
+	.res	1
+
+	lw	r3, devices + r2
+	lw	r2, [r3 + dev.ioaddr]
+	md	[r3 + dev.drv]
+	rj	r4, [driver.reset]
+	uj	[reset]
+
+; ------------------------------------------------------------------------
+; r2 - device number
+detach:
+	.res	1
+
+	lw	r3, devices + r2
+	lw	r2, [r3 + dev.ioaddr]
+	md	[r3 + dev.drv]
+	rj	r4, [driver.detach]
+	uj	[detach]
+
+; ------------------------------------------------------------------------
+; r2 - device number
 ; RETURN: r1 - >0 character
 ; RETURN: r1 - <0 operation result
 getc:

@@ -22,6 +22,7 @@
 .struct driver:
 	.init:	.res 1
 	.reset:	.res 1
+	.detach:.res 1
 	.getc:	.res 1
 	.putc:	.res 1
 .endstruct
