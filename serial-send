@@ -25,8 +25,18 @@ s.flushOutput()
 
 f = open(filename, "rb")
 d = f.read()
-s.write(d)
-
 f.close()
+
+length = len(d) >> 1
+s.write(bytes([(length>>8) & 0xff, length & 0xff]))
+
+csum_calc = 0
+for b in range(0, length):
+    csum_calc += d[b*2]*256 + d[b*2+1]
+    csum_calc &= 0xffff
+
+s.write(bytes([(csum_calc>>8) & 0xff, csum_calc & 0xff]))
+
+s.write(d)
 
 s.close()

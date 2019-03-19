@@ -1,10 +1,9 @@
 
-; 1. załadować binarnie niniejszy program, uruchomić
-; 2. kiedy zatrzyma się na HLT, 0 zatrzymać maszynę
-; 3. wprowadzić binarnie pod zastany adres w R7 dane do wgrania na dysk
-; 4. IC=0
-; 5. na kluczach ustawić wartość, jaka jest w AR (koniec danych)
-; 6. START
+; 1. załadować binarnie niniejszy program
+; 2. uruchomić
+; 3. przez port szeregowy przesłać dane do zapisania na dyskietce
+; 4. kiedy wysłane zostaną wszystkie dane - podnieść OPRQ
+; 5. dane zostaną zapisane na dyskietce
 
 	.cpu	mera400
 
@@ -80,7 +79,7 @@ stack:	.res	11*4, 0x0ded
 
 ; ------------------------------------------------------------------------
 oprq:
-	lw	r4, write_data
+	lw	r4, got_all
 	md	[STACKP]
 	rw	r4, -SP_IC
 	lip
@@ -122,22 +121,54 @@ start:
 
 ; ------------------------------------------------------------------------
 
+len:	.res	1
+sum:	.res	1
+
 read_data:
 
 	lw	r1, oprq
 	rw	r1, INTV_OPRQ
 
 	; initialize KZ
+
 	lw	r1, CH
 	lw	r2, devices
 	lj	kz_init
 
 	im	imask
 
+	; read data length
+
+	lw	r1, len
+	lw	r2, PC
+	lw	r3, 1
+	lj	readw
+
+	; read control sum
+
+	lw	r1, sum
+	lw	r2, PC
+	lw	r3, 1
+	lj	readw
+
+	; read data
+
 	lw	r1, buf
 	lw	r2, PC
 	lw	r3, 65535-buf
 	lj	readw
+
+got_all:
+
+	; check control sum
+
+	lw	r1, buf
+	lw	r2, [len]
+	lj	ctlsum
+
+	cw	r1, [sum]
+	jes	write_data
+	hlt	033
 
 write_data:
 
@@ -145,8 +176,7 @@ write_data:
 
 	lw	r1, buf
 	lw	r2, FLOP
-	lw	r3, r7
-	sw	r3, buf
+	lw	r3, [len]
 	lj	writew
 
 	lw	r2, FLOP
