@@ -60,6 +60,7 @@ devices:
 .endif
 
 imask:	.word	IMASK_ALL & ~IMASK_CPU_H
+imask0:	.word	IMASK_NONE
 
 dummy:	hlt	045
 	ujs	dummy
@@ -168,7 +169,10 @@ got_all:
 
 	cw	r1, [sum]
 	jes	write_data
+	im	imask0
+.loop_hlt:
 	hlt	033
+	ujs	.loop_hlt
 
 write_data:
 
