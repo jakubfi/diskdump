@@ -4,11 +4,6 @@
 	.include cpu.inc
 	.include io.inc
 
-	.const	RET_OK 0
-	.const	RET_NODEV -1
-	.const	RET_PARITY -2
-	.const	RET_IOERR -3
-
 	.const	DEV_NONE 0
 	.const	DEV_TERM 1
 	.const	DEV_FLOP 2

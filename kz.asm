@@ -1,3 +1,7 @@
+	.const	RET_OK 0
+	.const	RET_NODEV -1
+	.const	RET_PARITY -2
+	.const	RET_IOERR -3
 
 drv_kz:
 	.word	kz_init
