@@ -11,10 +11,10 @@ dw: dw.asm $(INCLUDES)
 	emas -o dw -c mera400 -Oraw dw.asm
 
 emu: $(BIN)
-	em400 -c $(CFG) -p $(BIN)
+	em400 -c $(CFG) -p dd
 
 push: $(BIN)
-	embin -o $(UPLOAD_PORT) $(BIN)
+	embin -o $(UPLOAD_PORT) dd
 
 clean:
 	rm -f dw dd *.log

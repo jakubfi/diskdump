@@ -4,49 +4,7 @@
 	.include cpu.inc
 	.include io.inc
 
-	.const	DEV_NONE 0
-	.const	DEV_TERM 1
-	.const	DEV_FLOP 2
-
-.struct dev:
-	.type:	.res 1
-	.ioaddr:.res 1
-	.drv:	.res 1
-.endstruct
-
-.struct driver:
-	.init:	.res 1
-	.reset:	.res 1
-	.detach:.res 1
-	.getc:	.res 1
-	.putc:	.res 1
-.endstruct
-
 	uj	start
-
-devices:
-
-.ifdef DEBLIN
-	.const	CH 15
-
-	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz ; 0: UZ-DAT terminal znakowy
-	.word	DEV_FLOP,	CH\IO_CHAN | 2\IO_DEV,	drv_kz ; 1: UZ-FX flop
-	.word	DEV_TERM,	CH\IO_CHAN | 4\IO_DEV,	drv_kz ; 2: UZ-DAT usb<->PC
-	.word	DEV_NONE,	0,			0
-
-	.const	TERM 0
-	.const	FLOP 1
-	.const	PC 2
-.else
-	.const	CH 7
-
-	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz
-	.word	DEV_NONE,	0,			0
-
-	.const	TERM 0
-	.const	FLOP 0
-	.const	PC 0
-.endif
 
 imask:	.word	IMASK_ALL & ~(IMASK_CPU_H | IMASK_GROUP_L)
 
@@ -68,7 +26,29 @@ stack:	.res	11*4, 0x0ded
 
 .ifndef DEBLIN
 	.include prng.inc
+.endif
 
+; ------------------------------------------------------------------------
+
+.ifdef DEBLIN
+	.const	CH 15
+	.const	TERM	CH\IO_CHAN | 0\IO_DEV
+	.const	FLOP	CH\IO_CHAN | 2\IO_DEV
+	.const	PC	CH\IO_CHAN | 4\IO_DEV
+uzdat_list:
+	.word	TERM, PC, -1
+.else
+	.const	CH 7
+	.const	TERM	CH\IO_CHAN | 0\IO_DEV
+	.const	FLOP	CH\IO_CHAN | 7\IO_DEV
+	.const	PC	CH\IO_CHAN | 7\IO_DEV
+
+uzdat_list:
+	.word	PC, TERM, -1
+
+.endif
+
+.ifndef DEBLIN
 ; ------------------------------------------------------------------------
 ; r1 - byte address of the buffer
 ; r2 - device number
@@ -126,7 +106,7 @@ start:
 
 	; initialize KZ
 	lw	r1, CH
-	lw	r2, devices
+	lw	r2, uzdat_list
 	lj	kz_init
 
 	im	imask
@@ -143,28 +123,46 @@ start:
 	.const	TRACKS 73+1
 	.const	SPT 26
 .else
-	.const	TRACKS 3
-	.const	SPT 2
+	.const	TRACKS 73
+	.const	SPT 26
 .endif
 	.const	SECT_LEN 128
 	.const	READ_LEN SECT_LEN
 
 	; seek to track 0, 'the special one'
 
-.ifdef DEBLIN
-	lw	r1, KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A | 0\KZ_FLOPPY_TRACK | 1\KZ_FLOPPY_SECTOR
-	ou	r1, CH\IO_CHAN | 2\IO_DEV | KZ_CMD_CTL4
-	.word	.no, .en, .ok, .pe
-.no:
-.en:
-.pe:	hlt	044
-.ok:
-.endif
+;.ifdef DEBLIN
+;	lw	r1, KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A | 0\KZ_FLOPPY_TRACK | 1\KZ_FLOPPY_SECTOR
+;	ou	r1, CH\IO_CHAN | 2\IO_DEV | KZ_CMD_CTL4
+;	.word	.no, .en, .ok, .pe
+;.no:
+;.en:
+;.pe:	hlt	044
+;.ok:
+;.endif
 	; load track count
 
 	lw	r6, -TRACKS
 
 .loop_track:
+
+	; log to terminal
+
+	lw	r1, '\r\n'
+	lw	r2, TERM
+	lj	put2c
+
+	lw	r1, track<<1
+	lw	r2, TERM
+	lj	puts
+
+	lw	r1, r6 + TRACKS+1
+	lw	r2, txt<<1
+	lj	unsigned2asc
+
+	lw	r1, txt<<1
+	lw	r2, TERM
+	lj	puts
 
 	; load sector count
 
@@ -172,16 +170,20 @@ start:
 
 .loop_sector:
 
+	lw	r1, '.'
+	lw	r2, TERM
+	lj	putc
+
 	; write track number byte
 
-	lw	r1, r6 + TRACKS
-	lwt	r2, PC
+	lw	r1, r6 + TRACKS+1
+	lw	r2, PC
 	lj	putc
 
 	; write sector number byte
 
 	lw	r1, r5 + SPT+1
-	lwt	r2, PC
+	lw	r2, PC
 	lj	putc
 
 	; clear the buffer
@@ -194,7 +196,7 @@ start:
 	; read data from disk
 
 	lw	r1, buf<<1
-	lwt	r2, FLOP
+	lw	r2, FLOP
 	lw	r3, READ_LEN
 .ifdef DEBLIN
 	lj	read
@@ -204,13 +206,13 @@ start:
 
 	; write return code byte
 
-	lwt	r2, PC
+	lw	r2, PC
 	lj	putc
 
 	; write I/O status byte
 
 	lw	r1, [kz_last_intspec]
-	lwt	r2, PC
+	lw	r2, PC
 	lj	putc
 
 	; calculate control sum
@@ -221,7 +223,7 @@ start:
 
 	; write control sum word
 
-	lwt	r2, PC
+	lw	r2, PC
 	lj	put2c
 
 	; check for blank sector
@@ -240,19 +242,19 @@ start:
 	; write frame type (0: regular)
 
 	lw	r1, 0
-	lwt	r2, PC
+	lw	r2, PC
 	lj	putc
 
 	; write data len word
 
 	lw	r1, READ_LEN
-	lwt	r2, PC
+	lw	r2, PC
 	lj	put2c
 
 	; write data
 
 	lw	r1, buf<<1
-	lwt	r2, PC
+	lw	r2, PC
 	lw	r3, READ_LEN
 	lj	write
 
@@ -263,19 +265,19 @@ start:
 	; write frame type (1: fill)
 
 	lw	r1, 1
-	lwt	r2, PC
+	lw	r2, PC
 	lj	putc
 
 	; write data len word
 
 	lw	r1, 2
-	lwt	r2, PC
+	lw	r2, PC
 	lj	put2c
 
 	; write data
 
 	lw	r1, [buf]
-	lwt	r2, PC
+	lw	r2, PC
 	lj	put2c
 
 .loop_restart:
@@ -289,12 +291,14 @@ start:
 	jm	.loop_track
 
         lw      r2, FLOP
-        lj      detach
+        lj      kz_detach
 
         lw      r2, FLOP
-        lj      reset
+        lj      kz_reset
 
 	hlt
 
 ; ------------------------------------------------------------------------
+txt:	.res	8
+track:	.asciiz	"Track: "
 buf:

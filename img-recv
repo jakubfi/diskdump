@@ -29,7 +29,7 @@ errors = 0
 
 # TSRICCFLDDDDDD....
 
-s = sys.stdin.buffer
+#s = sys.stdin.buffer
 
 failures = 0
 

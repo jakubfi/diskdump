@@ -3,13 +3,6 @@
 	.const	RET_PARITY -2
 	.const	RET_IOERR -3
 
-drv_kz:
-	.word	kz_init
-	.word	kz_reset
-	.word	kz_detach
-	.word	kz_getc
-	.word	kz_putc
-
 imask_noch:
         .word   IMASK_ALL & ~(IMASK_CPU_H | IMASK_GROUP_L | IMASK_ALL_CH)
 
@@ -18,32 +11,24 @@ kz_last_intspec:
 
 ; ------------------------------------------------------------------------
 ; r1 - channel number
-; r2 - device table
+; r2 - UZ-DAT list (-1 terminated)
 kz_init:
 	.res	1
-	lw	r4, r2
+
 .loop:
-	lw	r3, [r4+dev.type]
-	cwt	r3, DEV_NONE
+	lw	r3, [r2]
+	cwt	r3, -1
 	jes	.done
-	; is this a terminal?
-	cwt	r3, DEV_TERM
-	jn	.next
-	; is this terminal in channel that is being configured?
-	lw	r3, [r4+dev.ioaddr]
-	srz	r3
-	nr	r3, 0b1111
-	cw	r3, r1
-	jn	.next
-	; send initial 'read' command to the terminal
-	md	[r4+dev.ioaddr]
-	in	r3, KZ_CMD_DEV_READ
+
+	in	r3, r3 + KZ_CMD_DEV_READ
 	.word	.next, .next, .next, .next
 
 .next:	
-	awt	r4, dev
+	awt	r2, 1
 	ujs	.loop
-.done:	; wait for UZ-DATs to get their states straight
+
+.done:
+	; wait for UZ-DATs to get their states straight
 	lw	r4, -1000
 .wait:	irb	r4, .wait
 
@@ -79,7 +64,7 @@ kz_irq:
 
 ; ------------------------------------------------------------------------
 kz_idle:
-	.res	1
+	.word	0
 	im	imask
 .halt:	hlt
 	ujs	.halt
@@ -87,20 +72,23 @@ kz_idle:
 ; ------------------------------------------------------------------------
 ; r2 - device specification as for IN/OU
 kz_reset:
-	ou	r1, r2 + KZ_CMD_DEV_RESET
+	.res	1
+	ou	r2, r2 + KZ_CMD_DEV_RESET
 	.word	.no, .en, .ok, .pe
 .no:
 .en:
 .ok:
 .pe:
-	uj	r4
+	uj	[kz_reset]
 
 ; ------------------------------------------------------------------------
 ; r2 - device specification as for IN/OU
+; RETURN: r1 - result
 kz_detach:
+	.res	1
 .retry:	im	imask_noch
 
-	ou	r1, r2 + KZ_CMD_DEV_DETACH
+	ou	r2, r2 + KZ_CMD_DEV_DETACH
 	.word	.no, .en, .ok, .pe
 
 .en:	lj	kz_idle
@@ -112,14 +100,14 @@ kz_detach:
 .ok:	lwt	r1, RET_OK
 .done:	im	imask
 
-	uj	r4
+	uj	[kz_detach]
 
 ; ------------------------------------------------------------------------
 ; r1 - character to print (on right byte)
 ; r2 - device specification as for IN/OU
-; r4 - return jump
 ; RETURN: r1 - operation result
 kz_putc:
+	.res	1
 .retry:	im	imask_noch
 
 	ou	r1, r2 + KZ_CMD_DEV_WRITE
@@ -133,14 +121,14 @@ kz_putc:
 .pe:
 .ok:	lwt	r1, RET_OK
 .done:	im	imask
-	uj	r4
+	uj	[kz_putc]
 
 ; ------------------------------------------------------------------------
 ; r2 - device specification as for IN/OU
-; r4 - return jump
 ; RETURN: r1 - >0 character on the right byte if OK
 ; RETURN: r1 - <0 if error
 kz_getc:
+	.res	1
 .retry:	im	imask_noch
 
 	in	r1, r2 + KZ_CMD_DEV_READ
@@ -152,5 +140,5 @@ kz_getc:
 	ujs	.ok
 .no:	lwt	r1, RET_NODEV
 .ok:	im	imask
-	uj	r4
+	uj	[kz_getc]
 

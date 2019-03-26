@@ -10,49 +10,7 @@
 	.include cpu.inc
 	.include io.inc
 
-	.const	DEV_NONE 0
-	.const	DEV_TERM 1
-	.const	DEV_FLOP 2
-
-.struct dev:
-	.type:	.res 1
-	.ioaddr:.res 1
-	.drv:	.res 1
-.endstruct
-
-.struct driver:
-	.init:	.res 1
-	.reset:	.res 1
-	.detach:.res 1
-	.getc:	.res 1
-	.putc:	.res 1
-.endstruct
-
 	uj	start
-
-devices:
-
-.ifdef DEBLIN
-	.const	CH 15
-
-	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz ; 0: UZ-DAT terminal znakowy
-	.word	DEV_FLOP,	CH\IO_CHAN | 2\IO_DEV,	drv_kz ; 1: UZ-FX flop
-	.word	DEV_TERM,	CH\IO_CHAN | 4\IO_DEV,	drv_kz ; 2: UZ-DAT usb<->PC
-	.word	DEV_NONE,	0,			0
-
-	.const	TERM 0
-	.const	FLOP 1
-	.const	PC 2
-.else
-	.const	CH 7
-
-	.word	DEV_TERM,	CH\IO_CHAN | 0\IO_DEV,	drv_kz
-	.word	DEV_NONE,	0,			0
-
-	.const	TERM 0
-	.const	FLOP 0
-	.const	PC 0
-.endif
 
 imask:	.word	IMASK_ALL & ~IMASK_CPU_H
 imask0:	.word	IMASK_NONE
@@ -72,6 +30,24 @@ stack:	.res	11*4, 0x0ded
 
 	.include kz.asm
 	.include stdio.asm
+
+; ------------------------------------------------------------------------
+
+.ifdef DEBLIN
+	.const	CH 15
+	.const	TERM	CH\IO_CHAN | 0\IO_DEV
+	.const	FLOP	CH\IO_CHAN | 2\IO_DEV
+	.const	PC	CH\IO_CHAN | 4\IO_DEV
+uzdat_list:
+	.word	TERM, PC, -1
+.else
+	.const	CH 7
+	.const	TERM	CH\IO_CHAN | 0\IO_DEV
+	.const	FLOP	CH\IO_CHAN | 0\IO_DEV
+	.const	PC	CH\IO_CHAN | 0\IO_DEV
+uzdat_list:
+	.word	PC, -1
+.endif
 
 ; ------------------------------------------------------------------------
 oprq:
@@ -128,7 +104,7 @@ read_data:
 	; initialize KZ
 
 	lw	r1, CH
-	lw	r2, devices
+	lw	r2, uzdat_list
 	lj	kz_init
 
 	im	imask
@@ -179,10 +155,10 @@ write_data:
 	lj	writew
 
 	lw	r2, FLOP
-	lj	detach
+	lj	kz_detach
 
 	lw	r2, FLOP
-	lj	reset
+	lj	kz_reset
 
 	hlt
 
