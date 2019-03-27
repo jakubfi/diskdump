@@ -363,16 +363,15 @@ strcpy:
 strlen:
 	.res	1
 
-	lwt	r2, 0
+	lw	r2, r1
+	lwt	r1, 0
+	zlb	r4
 .loop:
-	lb	r4, r1
+	lb	r4, r2+r1
 	cwt	r4, '\0'
 	jes	.done
-	awt	r2, 1
-	awt	r1, 1
-	ujs	.loop
+	irb	r1, .loop
 .done:
-	lw	r1, r2
 	uj	[strlen]
 
 ; ------------------------------------------------------------------------
