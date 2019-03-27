@@ -444,10 +444,14 @@ ctlsum:
 ; r3 - filler word
 memset:
 	.res	1
+
+	cwt	r2, 0
+	jes	.done
+
 .loop:
 	rw	r3, r1
 	awt	r1, 1
 	drb	r2, .loop
-
+.done:
 	uj	[memset]
 
