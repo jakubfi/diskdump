@@ -343,6 +343,10 @@ signed2asc:
 ; r3 - count
 strncpy:
 	.res	1
+
+	cwt	r3, 0
+	jes	.done
+
 	lwt	r4, 1 ; make sure first loop reads a byte
 .loop:
 	cwt	r4, '\0'
@@ -352,7 +356,7 @@ strncpy:
 	awt	r1, 1
 	awt	r2, 1
 	drb	r3, .loop
-
+.done:
 	uj	[strncpy]
 
 ; ------------------------------------------------------------------------
