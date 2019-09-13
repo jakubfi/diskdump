@@ -152,15 +152,15 @@ start:
 	lw	r2, TERM
 	lj	put2c
 
-	lw	r1, track<<1
+	lw	r1, track
 	lw	r2, TERM
 	lj	puts
 
 	lw	r1, r6 + TRACKS+1
-	lw	r2, txt<<1
+	lw	r2, txt
 	lj	unsigned2asc
 
-	lw	r1, txt<<1
+	lw	r1, txt
 	lw	r2, TERM
 	lj	puts
 
@@ -195,7 +195,7 @@ start:
 
 	; read data from disk
 
-	lw	r1, buf<<1
+	lw	r1, buf
 	lw	r2, FLOP
 	lw	r3, READ_LEN
 .ifdef DEBLIN
@@ -253,7 +253,7 @@ start:
 
 	; write data
 
-	lw	r1, buf<<1
+	lw	r1, buf
 	lw	r2, PC
 	lw	r3, READ_LEN
 	lj	write
