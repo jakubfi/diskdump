@@ -23,67 +23,54 @@ stack:	.res	11*4, 0x0ded
 
 	.include kz.asm
 	.include stdio.asm
-
-.ifndef DEBLIN
-	.include prng.inc
-.endif
+	.include crc.asm
 
 ; ------------------------------------------------------------------------
 
-.ifdef DEBLIN
-	.const	CH 15
-	.const	TERM	CH\IO_CHAN | 0\IO_DEV
+	.const	CH	15
+	.const	PC	CH\IO_CHAN | 3\IO_DEV
 	.const	FLOP	CH\IO_CHAN | 2\IO_DEV
-	.const	PC	CH\IO_CHAN | 4\IO_DEV
 uzdat_list:
-	.word	TERM, PC, -1
-.else
-	.const	CH 7
-	.const	TERM	CH\IO_CHAN | 0\IO_DEV
-	.const	FLOP	CH\IO_CHAN | 7\IO_DEV
-	.const	PC	CH\IO_CHAN | 7\IO_DEV
+	.word	PC, -1
 
-uzdat_list:
-	.word	PC, TERM, -1
+	.const	TRACKS 73
+	.const	SPT 26
+	.const	SECT_LEN 128
+	.const	READ_LEN SECT_LEN
+	.const	RETRY	0
 
-.endif
+drive:	.word	KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A
+retries:.res	1
 
-.ifndef DEBLIN
 ; ------------------------------------------------------------------------
-; r1 - byte address of the buffer
-; r2 - device number
-; r3 - byte count
-; RETURN: r1 - operation result
-read_fake:
+dly:
 	.res	1
-	rl	.regs
+	lw	r2, 500
+.loop1:	lw	r1, 1000	; ~1ms
+.loop2:	drb	r1, .loop2
+	drb	r2, .loop1
+	uj	[dly]
 
-	lw	r5, r1
-	lw	r6, r3
+; ------------------------------------------------------------------------
+reposition:
+	.res	1
 
-	lj	urand
-	cw	r1, 10000
-	jls	.loop_empty
+	; current sector
+	lw	r1, r5
 
-.loop_rnd:
-	lj	urand
-	rb	r1, r5
-	awt	r5, 1
-	drb	r6, .loop_rnd
-	ujs	.done
+	; current track
+	lw	r2, r6
+	shc	r2, -5
+	or	r1, r2
 
-.loop_empty:
-	rb	r1, r5
-	awt	r5, 1
-	drb	r6, .loop_empty
+	; drive
+	lw	r2, [drive]
+	or	r1, r2
 
-.done:
-	lwt	r1, 0
-	ll	.regs
-	uj	[read_fake]
-.regs:	.res	3
+	lw	r2, FLOP
+	lj	kz_seek
 
-.endif
+	uj	[reposition]
 
 ; ------------------------------------------------------------------------
 ; ------------------------------------------------------------------------
@@ -102,8 +89,18 @@ read_fake:
 ; i poprzedza przerwanie 'ponowna gotowość'
 
 start:
-	mcl
+	; set initial retries
+	lw	r1, RETRY
+	rw	r1, retries
 
+	; read left/right door selection
+	rky	r1
+	cl	r1, 1
+	jn	.init
+	lw	r1, KZ_FLOPPY_DRIVE_1 | KZ_FLOPPY_SIDE_A
+	rw	r1, drive
+
+.init:
 	; initialize KZ
 	lw	r1, CH
 	lw	r2, uzdat_list
@@ -113,76 +110,24 @@ start:
 
 ; ------------------------------------------------------------------------
 
-.ifndef DEBLIN
-	lwt	r1, 10
-	lwt	r2, 33
-	lj	seed
-.endif
+	; load initial track and sector
 
-.ifdef DEBLIN
-	.const	TRACKS 73+1
-	.const	SPT 26
-.else
-	.const	TRACKS 73
-	.const	SPT 26
-.endif
-	.const	SECT_LEN 128
-	.const	READ_LEN SECT_LEN
+	lw	r6, 1
+	lw	r5, 1
 
-	; seek to track 0, 'the special one'
-
-;.ifdef DEBLIN
-;	lw	r1, KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A | 0\KZ_FLOPPY_TRACK | 1\KZ_FLOPPY_SECTOR
-;	ou	r1, CH\IO_CHAN | 2\IO_DEV | KZ_CMD_CTL4
-;	.word	.no, .en, .ok, .pe
-;.no:
-;.en:
-;.pe:	hlt	044
-;.ok:
-;.endif
-	; load track count
-
-	lw	r6, -TRACKS
-
-.loop_track:
-
-	; log to terminal
-
-	lw	r1, '\r\n'
-	lw	r2, TERM
-	lj	put2c
-
-	lw	r1, track
-	lw	r2, TERM
-	lj	puts
-
-	lw	r1, r6 + TRACKS+1
-	lw	r2, txt
-	lj	unsigned2asc
-
-	lw	r1, txt
-	lw	r2, TERM
-	lj	puts
-
-	; load sector count
-
-	lw	r5, -SPT
+;	lj	reposition
 
 .loop_sector:
 
-	lw	r1, '.'
-	lw	r2, TERM
-	lj	putc
-
 	; write track number byte
 
-	lw	r1, r6 + TRACKS+1
+	lw	r1, r6
 	lw	r2, PC
 	lj	putc
 
 	; write sector number byte
 
-	lw	r1, r5 + SPT+1
+	lw	r1, r5
 	lw	r2, PC
 	lj	putc
 
@@ -194,15 +139,16 @@ start:
 	lj	memset
 
 	; read data from disk
-
+.retry:
 	lw	r1, buf
 	lw	r2, FLOP
 	lw	r3, READ_LEN
-.ifdef DEBLIN
 	lj	read
-.else
-	lj	read_fake
-.endif
+
+	cw	r1, 0
+	jls	.error_sector
+
+.frame_write:
 
 	; write return code byte
 
@@ -215,13 +161,13 @@ start:
 	lw	r2, PC
 	lj	putc
 
-	; calculate control sum
+	; calculate crc
 
 	lw	r1, buf
-	lw	r2, READ_LEN/2
-	lj	ctlsum
+	lw	r2, READ_LEN
+	lj	crc16
 
-	; write control sum word
+	; write crc word
 
 	lw	r2, PC
 	lj	put2c
@@ -235,7 +181,55 @@ start:
 	cw	r2, [buf+r3]
 	jn	.regular_sector
 	drb	r3, .chkloop
-	ujs	.empty_sector
+	uj	.empty_sector
+
+.error_sector:
+	; retries exhausted?
+	lw	r7, [retries]
+	cwt	r7, 0
+	jes	.done_retrying
+
+	; retries--
+	awt	r7, -1
+	rw	r7, retries
+
+	; reposition the head in the same spot
+	; because failed read resets the head to initial position
+	lj	reposition
+	uj	.retry
+
+.old_regs:	.res 7
+.done_retrying:
+	; reset retry counter
+	lw	r7, RETRY
+	rw	r7, retries
+
+	ra	.old_regs
+
+	; reposition the head on the next sector/track
+	awt	r5, 1
+	cw	r5, SPT+1
+	jl	.repos
+	lwt	r5, 1
+	awt	r6, 1
+	cw	r6, TRACKS+1
+	jl	.repos
+	ujs	.no_repos
+.repos:
+	lj	reposition
+.no_repos:
+
+	; fill the sector data with '?'
+	lw	r1, buf
+	lw	r2, READ_LEN/2
+	lw	r3, '??'
+	lj	memset
+
+	la	.old_regs
+
+	; continue with writting the frame as if nothing happened
+
+	uj	.frame_write
 
 .regular_sector:
 
@@ -285,13 +279,13 @@ start:
 	; loop over
 
 	awt	r5, 1
-	jm	.loop_sector
+	cw	r5, SPT+1
+	jl	.loop_sector
 
+	lwt	r5, 1
 	awt	r6, 1
-	jm	.loop_track
-
-        lw      r2, FLOP
-        lj      kz_detach
+	cw	r6, TRACKS+1
+	jl	.loop_sector
 
         lw      r2, FLOP
         lj      kz_reset
@@ -299,6 +293,6 @@ start:
 	hlt
 
 ; ------------------------------------------------------------------------
-txt:	.res	8
-track:	.asciiz	"Track: "
+;txt:	.res	8
+;track:	.asciiz	"Track: "
 buf:

@@ -3,6 +3,7 @@
 import sys
 import serial
 import struct
+from crc_algorithms import Crc
 
 if len(sys.argv) != 2:
     sys.exit(1)
@@ -10,10 +11,10 @@ if len(sys.argv) != 2:
 filename = sys.argv[1]
 
 img = open(filename + ".img", "wb")
-dmp = open(filename + ".dmp", "wb")
+log = open(filename + ".log", "w")
 
-s = serial.Serial("/dev/ttyUSB0",
-    baudrate = 9600,
+s = serial.Serial("/dev/ttyUSB1",
+    baudrate = 1000000,
     bytesize = serial.EIGHTBITS,
     parity = serial.PARITY_NONE,
     stopbits = serial.STOPBITS_ONE,
@@ -29,50 +30,47 @@ errors = 0
 
 # TSRICCFLDDDDDD....
 
-#s = sys.stdin.buffer
-
 failures = 0
 
 HEADER_LEN = 9
 SECTOR_LEN = 128
 
+crc = Crc(width = 16, poly = 0x1021, reflect_in = False, xor_in = 0x1D0F, reflect_out = False, xor_out = 0x0000);
+
 while True:
     header = s.read(HEADER_LEN)
-    dmp.write(header)
     if len(header) < HEADER_LEN:
         print("Header len: %i" % len(header))
         sys.exit(1)
+
     (track, sector, ret, io_ret, csum, frame, length) = struct.unpack_from(">BBbBHBH", header)
 
-    if (ret != 0) or (io_ret != 0b000 and io_ret != 0b001 and io_ret != 0b100):
-        failures += 1
-
-    if frame > 2:
-        failures += 1
+    if frame > 1:
+        print("Frame type: %i" % frame)
+        sys.exit(1)
 
     if length != SECTOR_LEN and length != 2:
+        print("Wrong frame length: %i" % length)
+        sys.exit(1)
+
+    if ret != 0:
         failures += 1
 
     data = s.read(length)
-    dmp.write(data)
-
     if frame == 1:
         data = data * int(SECTOR_LEN/2)
-
-    img.write(data)
-
-    csum_res = "FAILED"
-    csum_calc = 0
-    for b in range(0, int(SECTOR_LEN/2)):
-        csum_calc += data[b*2]*256 + data[b*2+1]
-        csum_calc &= 0xffff
-    if csum == csum_calc:
-        csum_res = "OK"
+    crc_calc = crc.table_driven(''.join([ chr(x) for x in data]))
+    crc_res = "!!"
+    if csum == crc_calc:
+        crc_res = "OK"
     else:
         failures += 1
 
-    print("%2i/%2i %s (ret: %3i, ioret: %3i, cs: %5i/%5i, frame: %1i, len: %3i) (errors: %i)" % (track, sector, csum_res, ret, io_ret, csum, csum_calc, frame, length, failures))
+    log_line = "%2i/%2i (ret: %2i, ioret: %2i, crc: %04x/%04x (%s), frame: %1i, len: %3i) (errors: %i)" % (track, sector, ret, io_ret, csum, crc_calc, crc_res, frame, length, failures)
+    print(log_line)
+    log.write(log_line + "\n")
+
+    img.write(data)
 
 img.close()
-dmp.close()
 
