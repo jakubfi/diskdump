@@ -33,20 +33,19 @@ stack:	.res	11*4, 0x0ded
 uzdat_list:
 	.word	PC, -1
 
-	.const	TRACKS 73
-	.const	SPT 26
+	.const	TRACKS	73
+	.const	SPT	26
 	.const	SECT_LEN 128
-	.const	READ_LEN SECT_LEN
 	.const	RETRY	0
 
-drive:	.word	KZ_FLOPPY_DRIVE_0 | KZ_FLOPPY_SIDE_A
+drive:	.res	1
 retries:.res	1
 
 ; ------------------------------------------------------------------------
 dly:
 	.res	1
 	lw	r2, 500
-.loop1:	lw	r1, 1000	; ~1ms
+.loop1:	lw	r1, 1000	; ~2.2ms
 .loop2:	drb	r1, .loop2
 	drb	r2, .loop1
 	uj	[dly]
@@ -90,72 +89,93 @@ reposition:
 
 start:
 	; set initial retries
+
 	lw	r1, RETRY
 	rw	r1, retries
 
-	; read left/right door selection
-	rky	r1
-	cl	r1, 1
-	jn	.init
-	lw	r1, KZ_FLOPPY_DRIVE_1 | KZ_FLOPPY_SIDE_A
-	rw	r1, drive
+	; load initial disk address provided on keys: (mmdstttttttsssss)
+	;
+	; mm - module: (00 - left, 10 - right)
+	; d - disk (0 - left, 1 - right)
+	; s - side (0 - A, 1 - B)
+	; t - track (1-73)
+	; s - sector (1-26)
+	;
+	; if keys are set to 0, initial address is track/sector 1/1, drive 0
 
-.init:
+	rky	r1
+
+	; drive
+	lw	r5, r1
+	er	r5, 0b111111111111
+	rw	r5, drive
+
+	; sector
+	lw	r5, r1
+	nr	r5, 0b11111
+	bb	r0, ?Z
+	lwt	r5, 1
+
+	; track
+	shc	r1, 5
+	lw	r6, r1
+	nr	r5, 0b1111111
+	bb	r0, ?Z
+	lwt	r6, 1
+
 	; initialize KZ
+
 	lw	r1, CH
 	lw	r2, uzdat_list
 	lj	kz_init
 
 	im	imask
 
+	; set initial head position
+
+	lj	reposition
+
 ; ------------------------------------------------------------------------
 
-	; load initial track and sector
+dump_sector:
 
-	lw	r6, 1
-	lw	r5, 1
-
-;	lj	reposition
-
-.loop_sector:
-
-	; write track number byte
+	; send track number byte
 
 	lw	r1, r6
 	lw	r2, PC
 	lj	putc
 
-	; write sector number byte
+	; send sector number byte
 
 	lw	r1, r5
 	lw	r2, PC
 	lj	putc
 
-	; clear the buffer
+	; clear the data buffer
 
 	lw	r1, buf
-	lw	r2, READ_LEN/2
+	lw	r2, SECT_LEN/2
 	lw	r3, '__'
 	lj	memset
 
 	; read data from disk
-.retry:
+retry:
 	lw	r1, buf
 	lw	r2, FLOP
-	lw	r3, READ_LEN
+	lw	r3, SECT_LEN
 	lj	read
 
 	cw	r1, 0
-	jls	.error_sector
+	jls	error_sector
 
-.frame_write:
+frame_write:
 
-	; write return code byte
+	; send return code byte
 
 	lw	r2, PC
 	lj	putc
 
-	; write I/O status byte
+	; send I/O status byte
 
 	lw	r1, [kz_last_intspec]
 	lw	r2, PC
@@ -164,26 +184,26 @@ start:
 	; calculate crc
 
 	lw	r1, buf
-	lw	r2, READ_LEN
+	lw	r2, SECT_LEN
 	lj	crc16
 
-	; write crc word
+	; send crc word
 
 	lw	r2, PC
 	lj	put2c
 
 	; check for blank sector
 
-	lw	r3, (READ_LEN/2)-1
+	lw	r3, (SECT_LEN/2)-1
 	lw	r2, [buf]
 	awt	r1, 1
 .chkloop:
 	cw	r2, [buf+r3]
-	jn	.regular_sector
+	jn	regular_sector
 	drb	r3, .chkloop
-	uj	.empty_sector
+	uj	empty_sector
 
-.error_sector:
+error_sector:
 	; retries exhausted?
 	lw	r7, [retries]
 	cwt	r7, 0
@@ -196,7 +216,7 @@ start:
 	; reposition the head in the same spot
 	; because failed read resets the head to initial position
 	lj	reposition
-	uj	.retry
+	uj	retry
 
 .old_regs:	.res 7
 .done_retrying:
@@ -221,7 +241,7 @@ start:
 
 	; fill the sector data with '?'
 	lw	r1, buf
-	lw	r2, READ_LEN/2
+	lw	r2, SECT_LEN/2
 	lw	r3, '??'
 	lj	memset
 
@@ -229,70 +249,71 @@ start:
 
 	; continue with writting the frame as if nothing happened
 
-	uj	.frame_write
+	uj	frame_write
 
-.regular_sector:
+regular_sector:
 
-	; write frame type (0: regular)
+	; send frame type (0: regular)
 
 	lw	r1, 0
 	lw	r2, PC
 	lj	putc
 
-	; write data len word
+	; send data len word
 
-	lw	r1, READ_LEN
+	lw	r1, SECT_LEN
 	lw	r2, PC
 	lj	put2c
 
-	; write data
+	; send data
 
 	lw	r1, buf
 	lw	r2, PC
-	lw	r3, READ_LEN
+	lw	r3, SECT_LEN
 	lj	write
 
-	ujs	.loop_restart
+	ujs	loop_restart
 
-.empty_sector:
+empty_sector:
 
-	; write frame type (1: fill)
+	; send frame type (1: fill)
 
 	lw	r1, 1
 	lw	r2, PC
 	lj	putc
 
-	; write data len word
+	; send data len word
 
 	lw	r1, 2
 	lw	r2, PC
 	lj	put2c
 
-	; write data
+	; send data
 
 	lw	r1, [buf]
 	lw	r2, PC
 	lj	put2c
 
-.loop_restart:
+loop_restart:
 
 	; loop over
 
 	awt	r5, 1
 	cw	r5, SPT+1
-	jl	.loop_sector
+	jl	dump_sector
 
 	lwt	r5, 1
 	awt	r6, 1
 	cw	r6, TRACKS+1
-	jl	.loop_sector
+	jl	dump_sector
+
+	; stop the drive
 
         lw      r2, FLOP
         lj      kz_reset
 
-	hlt
+hltl:	hlt
+	ujs	hltl
 
 ; ------------------------------------------------------------------------
-;txt:	.res	8
-;track:	.asciiz	"Track: "
 buf:
