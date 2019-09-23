@@ -36,10 +36,11 @@ uzdat_list:
 	.const	TRACKS	73
 	.const	SPT	26
 	.const	SECT_LEN 128
-	.const	RETRY	0
 
-drive:	.res	1
-retries:.res	1
+drive:	.word	0
+retries:.word	0
+conf_retries:
+	.word	0
 
 ; ------------------------------------------------------------------------
 dly:
@@ -88,40 +89,43 @@ reposition:
 ; i poprzedza przerwanie 'ponowna gotowość'
 
 start:
-	; set initial retries
-
-	lw	r1, RETRY
-	rw	r1, retries
-
-	; load initial disk address provided on keys: (mmdstttttttsssss)
+	; load disk address, initial track number, and retries
+	; provided on keys: (mmdstttttttRRRRR)
 	;
 	; mm - module: (00 - left, 10 - right)
 	; d - disk (0 - left, 1 - right)
 	; s - side (0 - A, 1 - B)
 	; t - track (1-73)
-	; s - sector (1-26)
+	; R - number of retries
 	;
-	; if keys are set to 0, initial address is track/sector 1/1, drive 0
+	; sector is always set to 1
+	; if track == 0 track = 1
+	; if retries == 0 retries = 1
 
 	rky	r1
 
 	; drive
-	lw	r5, r1
-	er	r5, 0b111111111111
-	rw	r5, drive
+	lw	r2, r1
+	er	r2, 0b111111111111
+	rw	r2, drive
 
-	; sector
-	lw	r5, r1
-	nr	r5, 0b11111
-	bb	r0, ?Z
-	lwt	r5, 1
+	; retries
+	lw	r2, r1
+	nr	r2, 0b11111
+	blc	?Z
+	lwt	r2, 1 ; always at least 1 repetition (helps)
+	rw	r2, conf_retries
+	rw	r2, retries
 
 	; track
 	shc	r1, 5
 	lw	r6, r1
-	nr	r5, 0b1111111
-	bb	r0, ?Z
+	nr	r6, 0b1111111
+	blc	?Z ; no track 0, start with 1
 	lwt	r6, 1
+
+	; sector
+	lw	r5, 1 ; always start with sector 1
 
 	; initialize KZ
 
@@ -221,7 +225,7 @@ error_sector:
 .old_regs:	.res 7
 .done_retrying:
 	; reset retry counter
-	lw	r7, RETRY
+	lw	r7, [conf_retries]
 	rw	r7, retries
 
 	ra	.old_regs
