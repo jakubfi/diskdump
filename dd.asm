@@ -172,6 +172,10 @@ retry:
 	cw	r1, 0
 	jls	error_sector
 
+	; reset retry counter
+	lw	r7, [conf_retries]
+	rw	r7, retries
+
 frame_write:
 
 	; send return code byte
