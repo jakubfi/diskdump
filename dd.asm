@@ -98,8 +98,7 @@ start:
 	; t - track (1-73)
 	; R - number of retries
 	;
-	; sector is always set to 1
-	; if track == 0 track = 1
+	; sector is always set to 1 (sectors are numbered from 1)
 	; if retries == 0 retries = 1
 
 	rky	r1
@@ -121,8 +120,6 @@ start:
 	shc	r1, 5
 	lw	r6, r1
 	nr	r6, 0b1111111
-	blc	?Z ; no track 0, start with 1
-	lwt	r6, 1
 
 	; sector
 	lw	r5, 1 ; always start with sector 1
@@ -138,8 +135,6 @@ start:
 	; set initial head position
 
 	lj	reposition
-
-; ------------------------------------------------------------------------
 
 dump_sector:
 
