@@ -33,8 +33,9 @@ stack:	.res	11*4, 0x0ded
 uzdat_list:
 	.word	PC, -1
 
-	.const	TRACKS	73
+	.const	TRACKS	76
 	.const	SPT	26
+	.const	HEADER_LEN 4
 	.const	SECT_LEN 128
 
 drive:	.word	0
@@ -73,22 +74,9 @@ reposition:
 	uj	[reposition]
 
 ; ------------------------------------------------------------------------
-; ------------------------------------------------------------------------
-; ------------------------------------------------------------------------
+configure:
+	.res	1
 
-; 1 ścieżka do celów specjalnych (0)
-; 73 ścieżki użytkowe (1-73)
-; 3 ścieżki zapasowe (74-76)
-;
-; 26 sektorów, 128 bajtów
-; 3328 bajtów na ścieżkę
-; 242944 bajtów na stronę
-;
-; przerwanie 'koniec nośnika' 00100 pojawia się przy próbie dostępu
-; do ostatniego sektora (26) ostatniej ścieżki (73)
-; i poprzedza przerwanie 'ponowna gotowość'
-
-start:
 	; load disk address, initial track number, and retries
 	; provided on keys: (mmdstttttttRRRRR)
 	;
@@ -124,6 +112,31 @@ start:
 	; sector
 	lw	r5, 1 ; always start with sector 1
 
+	uj	[configure]
+
+; ------------------------------------------------------------------------
+; ------------------------------------------------------------------------
+; ------------------------------------------------------------------------
+
+; 1 ścieżka do celów specjalnych (0)
+; 73 ścieżki użytkowe (1-73)
+; 3 ścieżki zapasowe (74-76)
+;
+; 26 sektorów, 128 bajtów
+; 3328 bajtów na ścieżkę
+; 242944 bajtów na stronę
+;
+; przerwanie 'koniec nośnika' 00100 pojawia się przy próbie dostępu
+; do ostatniego sektora (26) ostatniej ścieżki (73)
+; i poprzedza przerwanie 'ponowna gotowość'
+
+; r5 - sector number
+; r6 - track number
+; r4 - data pointer
+
+start:
+	lj	configure
+
 	; initialize KZ
 
 	lw	r1, CH
@@ -138,17 +151,17 @@ start:
 
 dump_sector:
 
-	; send track number byte
+	lw	r4, header<<1
 
-	lw	r1, r6
-	lw	r2, PC
-	lj	putc
+	; store track number byte
 
-	; send sector number byte
+	rb	r6, r4
+	awt	r4, 1
 
-	lw	r1, r5
-	lw	r2, PC
-	lj	putc
+	; store sector number byte
+
+	rb	r5, r4
+	awt	r4, 1
 
 	; clear the data buffer
 
@@ -173,38 +186,54 @@ retry:
 
 frame_write:
 
-	; send return code byte
+	; store return code byte
 
-	lw	r2, PC
-	lj	putc
+	rb	r1, r4
+	awt	r4, 1
 
-	; send I/O status byte
+	; store I/O status byte
 
 	lw	r1, [kz_last_intspec]
-	lw	r2, PC
-	lj	putc
+	rb	r1, r4
+	awt	r4, 1
 
-	; calculate crc
+	; send header
+
+	lw	r1, header
+	lw	r2, PC
+	lw	r3, HEADER_LEN
+	lj	write
+
+	; calculate header crc
+
+	lw	r1, header
+	lw	r2, HEADER_LEN
+	lj	crc16
+
+	; send header crc word
+
+	lw	r2, PC
+	lj	put2c
+
+	; send data
+
+	lw	r1, buf
+	lw	r2, PC
+	lw	r3, SECT_LEN
+	lj	write
+
+	; calculate data crc
 
 	lw	r1, buf
 	lw	r2, SECT_LEN
 	lj	crc16
 
-	; send crc word
+	; send data crc word
 
 	lw	r2, PC
 	lj	put2c
 
-	; check for blank sector
-
-	lw	r3, (SECT_LEN/2)-1
-	lw	r2, [buf]
-	awt	r1, 1
-.chkloop:
-	cw	r2, [buf+r3]
-	jn	regular_sector
-	drb	r3, .chkloop
-	uj	empty_sector
+	uj	loop_restart
 
 error_sector:
 	; retries exhausted?
@@ -254,29 +283,6 @@ error_sector:
 
 	uj	frame_write
 
-regular_sector:
-
-	; send frame type (0: regular)
-
-	lw	r1, 0
-	lw	r2, PC
-	lj	putc
-
-	; send data len word
-
-	lw	r1, SECT_LEN
-	lw	r2, PC
-	lj	put2c
-
-	; send data
-
-	lw	r1, buf
-	lw	r2, PC
-	lw	r3, SECT_LEN
-	lj	write
-
-	ujs	loop_restart
-
 empty_sector:
 
 	; send frame type (1: fill)
@@ -319,4 +325,5 @@ hltl:	hlt
 	ujs	hltl
 
 ; ------------------------------------------------------------------------
+header:	.res	16
 buf:

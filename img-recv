@@ -14,7 +14,7 @@ img = open(filename + ".img", "wb")
 log = open(filename + ".log", "w")
 
 s = serial.Serial("/dev/ttyUSB1",
-    baudrate = 1000000,
+    baudrate = 256000,
     bytesize = serial.EIGHTBITS,
     parity = serial.PARITY_NONE,
     stopbits = serial.STOPBITS_ONE,
@@ -26,47 +26,39 @@ s = serial.Serial("/dev/ttyUSB1",
 s.flushInput()
 s.flushOutput()
 
-errors = 0
-
-# TSRICCFLDDDDDD....
-
 failures = 0
 
-HEADER_LEN = 9
+HEADER_LEN = 4
 SECTOR_LEN = 128
 
 crc = Crc(width = 16, poly = 0x1021, reflect_in = False, xor_in = 0x1D0F, reflect_out = False, xor_out = 0x0000);
 
 while True:
+
+    # read header
+
     header = s.read(HEADER_LEN)
     if len(header) < HEADER_LEN:
         print("Header len: %i" % len(header))
         sys.exit(1)
 
-    (track, sector, ret, io_ret, csum, frame, length) = struct.unpack_from(">BBbBHBH", header)
-
-    if frame > 1:
-        print("Frame type: %i" % frame)
-        sys.exit(1)
-
-    if length != SECTOR_LEN and length != 2:
-        print("Wrong frame length: %i" % length)
-        sys.exit(1)
-
-    if ret != 0:
+    (track, sector, ret, io_ret) = struct.unpack_from(">BBbB", header)
+    (crc_header,) = struct.unpack_from(">H", s.read(2))
+    crc_header_calc = crc.table_driven(''.join([ chr(x) for x in header]))
+    if crc_header_calc != crc_header:
         failures += 1
 
-    data = s.read(length)
-    if frame == 1:
-        data = data * int(SECTOR_LEN/2)
+    if ret != 0 or io_ret != 1:
+        failures += 1
+
+    # read data
+    data = s.read(SECTOR_LEN)
+    (crc_data,) = struct.unpack_from(">H", s.read(2))
     crc_calc = crc.table_driven(''.join([ chr(x) for x in data]))
-    crc_res = "!!"
-    if csum == crc_calc:
-        crc_res = "OK"
-    else:
+    if crc_data != crc_calc:
         failures += 1
 
-    log_line = "%2i/%2i (ret: %2i, ioret: %2i, crc: %04x/%04x (%s), frame: %1i, len: %3i) (errors: %i)" % (track, sector, ret, io_ret, csum, crc_calc, crc_res, frame, length, failures)
+    log_line = "%2i/%2i ret: %2i, ioret: %2i, head/data crc: %s/%s (errors: %i)" % (track, sector, ret, io_ret, crc_header_calc == crc_header, crc_data == crc_calc, failures)
     print(log_line)
     log.write(log_line + "\n")
 
