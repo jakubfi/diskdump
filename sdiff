@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import hashlib
+import argparse
+from pathlib import Path
+
+# ------------------------------------------------------------------------
+def disk_hash(fname):
+    f = open(fname, "rb")
+    s = []
+    while True:
+        d = f.read(128)
+        if not d:
+            break
+        m = hashlib.sha256()
+        m.update(d)
+        s.append(m.hexdigest())
+    f.close()
+    return s
+        
+# ------------------------------------------------------------------------
+def hash_all_images(dir):
+    dic = {}
+    for filename in Path(dir).glob('**/*.img'):
+        h = disk_hash(filename)
+        fn = os.path.basename(filename)
+        name = os.path.splitext(fn)[0]
+        dic[name] = h
+    return dic
+
+# ------------------------------------------------------------------------
+def sdiff(d1, d2):
+    e1 = 0
+    e2 = 0
+    ecommon = 0
+    same = 0
+    track = 1
+    spt = 1
+    for s1, s2 in zip(d1, d2):
+        if spt == 1:
+            print("%2s: " % track, end="")
+        spt += 1
+
+        if s1 == s2:
+            if s1 == err_hash:
+                e1 += 1
+                e2 += 1
+                ecommon += 1
+                print("X", end="")
+            else:
+                same += 1
+                print(".", end="")
+        elif s1 == err_hash:
+            print("1", end="")
+            e1 += 1
+        elif s2 == err_hash:
+            print("2", end="")
+            e2 += 1
+        else:
+            print("/", end="")
+        if spt == 27:
+            if track % 4:
+                print("  ", end="")
+            else:
+                print("")
+            track += 1
+            spt = 1
+    print("")
+#    print("Legend: . - same, / - different, 1 or 2 - error on disk 1 or 2, X - error on both disks")
+    print("Similarity: %.2f%%, errors (1/2): %i/%i, common errors: %i" % ((same*100)/(73*26), e1, e2, ecommon))
+    print("")
+
+# ------------------------------------------------------------------------
+def match(hay, needle):
+    for i in range(len(needle)):
+        try:
+            if hay[i] != needle[i] and needle[i] != err_hash:
+               return False
+        except:
+            return False
+    return True
+
+# ------------------------------------------------------------------------
+def find_sectors(disk, needle):
+    start = 0
+    indexes = []
+    while True:
+        try:
+            i = start + disk[start:].index(needle[0])
+        except:
+            return indexes
+
+        j = i + len(needle)
+        if match(disk[i:j], needle):
+            indexes.append(i)
+            start = j
+        else:
+            start += 1
+
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser(description="")
+parser.add_argument("-l", "--length", type=int, help="length to compare disks by", default=0)
+parser.add_argument("-o", "--offset", type=int, help="offset to start comparison from", default=0)
+parser.add_argument("-c", "--context", type=int, help="search context", default=0)
+parser.add_argument("-m", "--map", help="display image map", action="store_const", const=1, default=0)
+parser.add_argument('image', nargs='+', help='image names (1 or 2)')
+args = parser.parse_args()
+
+# sdiff i1 i2
+# sdiff i1
+# sdiff -l 5 i1
+# sdiff -l 5 -o 20 i1
+# sdiff -c 2 i1
+
+# get the hash for an unreadable sector marker
+merr = hashlib.sha256()
+merr.update(bytes('?'*128, encoding="ascii"))
+err_hash = merr.hexdigest()
+
+# hash all images recursively
+d = hash_all_images(".")
+
+# search for images similar to the image i1
+if args.length > 0:
+    print("Searching images similar to: %s" % (args.image[0]))
+    print("Starting sector: %i" % (args.offset))
+    print("Search length: %i" % (args.length))
+    print()
+    needle = d[args.image[0]][args.offset:args.offset+args.length]
+
+    for name, disk in d.items():
+        indexes = find_sectors(disk, needle)
+        if name != args.image[0] and indexes:
+            print("Found: %s at %s, length %i" % (name, indexes, args.length))
+            if args.map:
+                sdiff(d[args.image[0]], d[name])
+
+
+# search for images that can fill gaps in image i1 by +context -context sectors
+elif args.context > 0:
+    pass
+
+# display image map (if one given), or compare images (if two given)
+else:
+    if len(args.image) == 1:
+        args.image.append(args.image[0])
+    
+    sdiff(d[args.image[0]], d[args.image[1]])
+
+
