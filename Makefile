@@ -1,4 +1,4 @@
-INCLUDES=stdio.asm kz.asm
+INCLUDES=stdio.asm kz.asm crc.asm
 CFG=em400.cfg
 UPLOAD_PORT=/dev/ttyUSB0
 
